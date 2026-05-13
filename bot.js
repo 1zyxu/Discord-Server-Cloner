@@ -421,7 +421,7 @@ function createProgressBar(current, total, width = 28) {
 }
 
 function formatCloneLog(title, progress, stats) {
-  let log = `# **${title}**\n\n`;
+  let log = `**${title}**\n\n`;
   
   if (progress) {
     log += `${progress}\n\n`;
@@ -429,11 +429,19 @@ function formatCloneLog(title, progress, stats) {
   
   if (stats && stats.length > 0) {
     stats.forEach(stat => {
-      log += `* ${stat}\n`;
+      log += `${stat}\n`;
     });
   }
   
   return log;
+}
+
+function formatProgressLine(label, current, total) {
+  const percentage = Math.round((current / total) * 100);
+  const filled = Math.floor((current / Math.max(total, 1)) * 20);
+  const empty = 20 - filled;
+  const bar = '█'.repeat(filled) + '░'.repeat(empty);
+  return `${label}: ${bar} ${current}/${total}`;
 }
 
 // ===== START CLONING PROCESS =====
@@ -466,15 +474,15 @@ async function startCloning(interaction, sourceGuildId, options = {}) {
     await logChannel.send(startMessage);
 
     // Scanning phase
-    await logChannel.send(formatCloneLog('Guild Clone Process\n\nScanning Source Guild', createProgressBar(0, 100), []));
+    await logChannel.send(formatCloneLog('Scanning Source Guild', '', ['Starting scan...']));
     const guildData = await scanGuild(sourceGuild);
     
     const scanStats = [
-      `Roles Found: \`${guildData.roles.length}\``,
-      `Categories Found: \`${guildData.categories.length}\``,
-      `Standalone Channels: \`${guildData.standalone_channels.length}\``
+      `Roles Found: ${guildData.roles.length}`,
+      `Categories Found: ${guildData.categories.length}`,
+      `Standalone Channels: ${guildData.standalone_channels.length}`
     ];
-    await logChannel.send(formatCloneLog('Scanning Source Guild', createProgressBar(100, 100), scanStats));
+    await logChannel.send(formatCloneLog('Scanning Source Guild', '', scanStats));
     
     if (copyGuildDescription && sourceGuild.description) {
       try {
@@ -486,7 +494,7 @@ async function startCloning(interaction, sourceGuildId, options = {}) {
     }
     
     if (destructive) {
-      await logChannel.send(formatCloneLog('Cleaning Target Guild', createProgressBar(100, 100), ['Existing channels and roles removed.']));
+      await logChannel.send(formatCloneLog('Cleaning Target Guild', '', ['Existing channels and roles removed.']));
       await deleteAllChannels(targetGuild, logChannel.id);
       await deleteAllRoles(targetGuild);
     }
@@ -503,25 +511,26 @@ async function startCloning(interaction, sourceGuildId, options = {}) {
         if (everyoneRole) roleMap.set(everyoneRole.id, targetGuild.roles.everyone.id);
       }
 
-      const roleProgress = Math.round((rolesCreated / Math.max(guildData.roles.length, 1)) * 100);
-      const roleStats = [`Roles Created: \`${rolesCreated}\``];
-      await logChannel.send(formatCloneLog('Creating Roles', createProgressBar(rolesCreated, Math.max(guildData.roles.length, 1)), roleStats));
+      const roleStats = [formatProgressLine('Roles', rolesCreated, Math.max(guildData.roles.length, 1))];
+      await logChannel.send(formatCloneLog('Creating Roles', '', roleStats));
     }
 
     let channelsCreated = 0;
     let categoryMap = new Map();
     if (copyChannels) {
+      const totalCategorizedChannels = guildData.categories.reduce((sum, cat) => sum + cat.channels.length, 0);
+      
       categoryMap = await cloneCategories(targetGuild, guildData, roleMap, copyPermissions);
       const categoriesCreated = categoryMap.size;
       
-      const catStats = [`Categories Created: \`${categoriesCreated}\``];
-      await logChannel.send(formatCloneLog('Creating Categories', createProgressBar(categoriesCreated, Math.max(guildData.categories.length, 1)), catStats));
+      const catStats = [formatProgressLine('Categories', categoriesCreated, Math.max(guildData.categories.length, 1))];
+      await logChannel.send(formatCloneLog('Creating Categories', '', catStats));
 
       const channelCount = await cloneChannels(targetGuild, guildData, roleMap, categoryMap, copyPermissions, copyChannelMetadata);
       channelsCreated += channelCount;
       
-      const channelStats = [`Channels Created: \`${channelCount}\``];
-      await logChannel.send(formatCloneLog('Creating Channels', createProgressBar(channelCount, Math.max(guildData.categorized_channels.length, 1)), channelStats));
+      const channelStats = [formatProgressLine('Channels', channelCount, Math.max(totalCategorizedChannels, 1))];
+      await logChannel.send(formatCloneLog('Creating Channels', '', channelStats));
 
       if (CONFIG.cloning.clone_standalone && guildData.standalone_channels.length > 0) {
         const standaloneCount = await cloneStandaloneChannels(targetGuild, guildData, roleMap, copyPermissions, copyChannelMetadata);
@@ -556,8 +565,12 @@ async function startCloning(interaction, sourceGuildId, options = {}) {
       totalRolePerms += r.permissions.toArray().length;
     });
 
-    const statusMessage = formatCloneLog('Status', '', ['Guild cloning process is running successfully.']);
-    await logChannel.send(statusMessage);
+    const progressStats = [
+      formatProgressLine('Roles', Object.keys(roleMap).length, guildData.roles.length),
+      formatProgressLine('Categories', categoryMap.size, guildData.categories.length),
+      formatProgressLine('Channels', channelsCreated, guildData.categories.reduce((sum, cat) => sum + cat.channels.length, 0) + guildData.standalone_channels.length)
+    ];
+    await logChannel.send(formatCloneLog('Clone Progress Summary', '', progressStats));
 
     const successEmbed = new EmbedBuilder()
       .setColor('#00FF00')
