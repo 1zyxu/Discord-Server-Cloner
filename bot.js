@@ -66,6 +66,14 @@ const commands = [
         .setDescription('Create missing channels from the source guild')
         .setRequired(false))
     .addBooleanOption(option =>
+      option.setName('copy_permissions')
+        .setDescription('Copy permission overwrites to roles and channels')
+        .setRequired(false))
+    .addBooleanOption(option =>
+      option.setName('copy_channel_metadata')
+        .setDescription('Copy channel metadata (topic, NSFW, rate limit, etc.)')
+        .setRequired(false))
+    .addBooleanOption(option =>
       option.setName('copy_guild_description')
         .setDescription('Copy the source guild description if supported')
         .setRequired(false))
@@ -338,6 +346,8 @@ async function handleManualCopy(interaction) {
 
   const copyRoles = interaction.options.getBoolean('copy_roles') ?? true;
   const copyChannels = interaction.options.getBoolean('copy_channels') ?? true;
+  const copyPermissions = interaction.options.getBoolean('copy_permissions') ?? true;
+  const copyChannelMetadata = interaction.options.getBoolean('copy_channel_metadata') ?? true;
   const copyGuildDescription = interaction.options.getBoolean('copy_guild_description') ?? false;
 
   if (!copyRoles && !copyChannels && !copyGuildDescription) {
@@ -352,6 +362,8 @@ async function handleManualCopy(interaction) {
     preserveExistingRoles: true,
     copyRoles,
     copyChannels,
+    copyPermissions,
+    copyChannelMetadata,
     copyGuildDescription
   });
 }
@@ -432,6 +444,8 @@ async function startCloning(interaction, sourceGuildId, options = {}) {
   const destructive = options.destructive !== undefined ? options.destructive : CONFIG.cloning.auto_delete_target;
   const copyRoles = options.copyRoles !== undefined ? options.copyRoles : true;
   const copyChannels = options.copyChannels !== undefined ? options.copyChannels : true;
+  const copyPermissions = options.copyPermissions !== undefined ? options.copyPermissions : true;
+  const copyChannelMetadata = options.copyChannelMetadata !== undefined ? options.copyChannelMetadata : true;
   const preserveExistingRoles = options.preserveExistingRoles || false;
   const copyGuildDescription = options.copyGuildDescription || false;
 
@@ -497,20 +511,20 @@ async function startCloning(interaction, sourceGuildId, options = {}) {
     let channelsCreated = 0;
     let categoryMap = new Map();
     if (copyChannels) {
-      categoryMap = await cloneCategories(targetGuild, guildData, roleMap);
+      categoryMap = await cloneCategories(targetGuild, guildData, roleMap, copyPermissions);
       const categoriesCreated = categoryMap.size;
       
       const catStats = [`Categories Created: \`${categoriesCreated}\``];
       await logChannel.send(formatCloneLog('Creating Categories', createProgressBar(categoriesCreated, Math.max(guildData.categories.length, 1)), catStats));
 
-      const channelCount = await cloneChannels(targetGuild, guildData, roleMap, categoryMap);
+      const channelCount = await cloneChannels(targetGuild, guildData, roleMap, categoryMap, copyPermissions, copyChannelMetadata);
       channelsCreated += channelCount;
       
       const channelStats = [`Channels Created: \`${channelCount}\``];
       await logChannel.send(formatCloneLog('Creating Channels', createProgressBar(channelCount, Math.max(guildData.categorized_channels.length, 1)), channelStats));
 
       if (CONFIG.cloning.clone_standalone && guildData.standalone_channels.length > 0) {
-        const standaloneCount = await cloneStandaloneChannels(targetGuild, guildData, roleMap);
+        const standaloneCount = await cloneStandaloneChannels(targetGuild, guildData, roleMap, copyPermissions, copyChannelMetadata);
         channelsCreated += standaloneCount;
       }
     }
@@ -876,7 +890,7 @@ async function cloneRoles(guild, guildData, options = {}) {
 
 
 // ===== CLONE CATEGORIES =====
-async function cloneCategories(guild, guildData, roleMap) {
+async function cloneCategories(guild, guildData, roleMap, copyPermissions = true) {
   const categoryMap = new Map();
   const batchSize = 3;
   let created = 0;
@@ -887,14 +901,17 @@ async function cloneCategories(guild, guildData, roleMap) {
     await Promise.allSettled(batch.map(async (categoryData) => {
       try {
         const permissionOverwrites = [];
-        for (const overwrite of categoryData.permission_overwrites) {
-          const newId = roleMap.get(overwrite.id);
-          if (newId) {
-            permissionOverwrites.push({
-              id: newId,
-              allow: new PermissionsBitField(BigInt(overwrite.allow_bitfield || 0)),
-              deny: new PermissionsBitField(BigInt(overwrite.deny_bitfield || 0))
-            });
+        
+        if (copyPermissions) {
+          for (const overwrite of categoryData.permission_overwrites) {
+            const newId = roleMap.get(overwrite.id);
+            if (newId) {
+              permissionOverwrites.push({
+                id: newId,
+                allow: new PermissionsBitField(BigInt(overwrite.allow_bitfield || 0)),
+                deny: new PermissionsBitField(BigInt(overwrite.deny_bitfield || 0))
+              });
+            }
           }
         }
         
@@ -973,7 +990,7 @@ async function createChannelWithFallback(guild, channelOptions) {
 }
 
 // ===== CLONE CHANNELS =====
-async function cloneChannels(guild, guildData, roleMap, categoryMap) {
+async function cloneChannels(guild, guildData, roleMap, categoryMap, copyPermissions = true, copyChannelMetadata = true) {
   let channelCount = 0;
   let totalChannels = guildData.categories.reduce((sum, cat) => sum + cat.channels.length, 0);
   const batchSize = CONFIG.settings.batch_size || 5;
@@ -987,14 +1004,17 @@ async function cloneChannels(guild, guildData, roleMap, categoryMap) {
       
       await Promise.allSettled(batch.map(async (channelData) => {
         const permissionOverwrites = [];
-        for (const overwrite of channelData.permission_overwrites) {
-          const newId = roleMap.get(overwrite.id);
-          if (newId) {
-            permissionOverwrites.push({
-              id: newId,
-              allow: new PermissionsBitField(BigInt(overwrite.allow_bitfield || 0)),
-              deny: new PermissionsBitField(BigInt(overwrite.deny_bitfield || 0))
-            });
+        
+        if (copyPermissions) {
+          for (const overwrite of channelData.permission_overwrites) {
+            const newId = roleMap.get(overwrite.id);
+            if (newId) {
+              permissionOverwrites.push({
+                id: newId,
+                allow: new PermissionsBitField(BigInt(overwrite.allow_bitfield || 0)),
+                deny: new PermissionsBitField(BigInt(overwrite.deny_bitfield || 0))
+              });
+            }
           }
         }
         
@@ -1008,17 +1028,20 @@ async function cloneChannels(guild, guildData, roleMap, categoryMap) {
           reason: 'Guild clone'
         };
         
-        if (channelData.topic) channelOptions.topic = channelData.topic;
-        if (channelData.nsfw !== undefined) channelOptions.nsfw = channelData.nsfw;
-        if (channelData.rate_limit_per_user) channelOptions.rateLimitPerUser = channelData.rate_limit_per_user;
+        if (copyChannelMetadata) {
+          if (channelData.topic) channelOptions.topic = channelData.topic;
+          if (channelData.nsfw !== undefined) channelOptions.nsfw = channelData.nsfw;
+          if (channelData.rate_limit_per_user) channelOptions.rateLimitPerUser = channelData.rate_limit_per_user;
+          if (channelData.rtc_region) channelOptions.rtcRegion = channelData.rtc_region;
+          if (channelData.default_auto_archive_duration) channelOptions.defaultAutoArchiveDuration = channelData.default_auto_archive_duration;
+        }
+        
         if (channelData.bitrate) channelOptions.bitrate = Math.min(channelData.bitrate, CONFIG.settings.max_bitrate);
         if (channelData.user_limit) channelOptions.userLimit = channelData.user_limit;
-        if (channelData.rtc_region) channelOptions.rtcRegion = channelData.rtc_region;
         
         if ((channelType === 2 || channelType === 13) && channelData.video_quality_mode) {
           channelOptions.videoQualityMode = channelData.video_quality_mode;
         }
-        if (channelData.default_auto_archive_duration) channelOptions.defaultAutoArchiveDuration = channelData.default_auto_archive_duration;
         
         const newChannel = await createChannelWithFallback(guild, channelOptions);
         if (newChannel) channelCount++;
@@ -1041,7 +1064,7 @@ async function cloneChannels(guild, guildData, roleMap, categoryMap) {
 }
 
 // ===== CLONE STANDALONE CHANNELS =====
-async function cloneStandaloneChannels(guild, guildData, roleMap) {
+async function cloneStandaloneChannels(guild, guildData, roleMap, copyPermissions = true, copyChannelMetadata = true) {
   let channelCount = 0;
   const batchSize = CONFIG.settings.batch_size || 5;
 
@@ -1050,14 +1073,17 @@ async function cloneStandaloneChannels(guild, guildData, roleMap) {
     
     await Promise.allSettled(batch.map(async (channelData) => {
       const permissionOverwrites = [];
-      for (const overwrite of channelData.permission_overwrites) {
-        const newId = roleMap.get(overwrite.id);
-        if (newId) {
-          permissionOverwrites.push({
-            id: newId,
-            allow: new PermissionsBitField(BigInt(overwrite.allow_bitfield || 0)),
-            deny: new PermissionsBitField(BigInt(overwrite.deny_bitfield || 0))
-          });
+      
+      if (copyPermissions) {
+        for (const overwrite of channelData.permission_overwrites) {
+          const newId = roleMap.get(overwrite.id);
+          if (newId) {
+            permissionOverwrites.push({
+              id: newId,
+              allow: new PermissionsBitField(BigInt(overwrite.allow_bitfield || 0)),
+              deny: new PermissionsBitField(BigInt(overwrite.deny_bitfield || 0))
+            });
+          }
         }
       }
       
@@ -1070,17 +1096,20 @@ async function cloneStandaloneChannels(guild, guildData, roleMap) {
         reason: 'Guild clone'
       };
       
-      if (channelData.topic) channelOptions.topic = channelData.topic;
-      if (channelData.nsfw !== undefined) channelOptions.nsfw = channelData.nsfw;
-      if (channelData.rate_limit_per_user) channelOptions.rateLimitPerUser = channelData.rate_limit_per_user;
+      if (copyChannelMetadata) {
+        if (channelData.topic) channelOptions.topic = channelData.topic;
+        if (channelData.nsfw !== undefined) channelOptions.nsfw = channelData.nsfw;
+        if (channelData.rate_limit_per_user) channelOptions.rateLimitPerUser = channelData.rate_limit_per_user;
+        if (channelData.rtc_region) channelOptions.rtcRegion = channelData.rtc_region;
+        if (channelData.default_auto_archive_duration) channelOptions.defaultAutoArchiveDuration = channelData.default_auto_archive_duration;
+      }
+      
       if (channelData.bitrate) channelOptions.bitrate = Math.min(channelData.bitrate, CONFIG.settings.max_bitrate);
       if (channelData.user_limit) channelOptions.userLimit = channelData.user_limit;
-      if (channelData.rtc_region) channelOptions.rtcRegion = channelData.rtc_region;
       
       if ((channelType === 2 || channelType === 13) && channelData.video_quality_mode) {
         channelOptions.videoQualityMode = channelData.video_quality_mode;
       }
-      if (channelData.default_auto_archive_duration) channelOptions.defaultAutoArchiveDuration = channelData.default_auto_archive_duration;
       
       const newChannel = await createChannelWithFallback(guild, channelOptions);
       if (newChannel) channelCount++;
