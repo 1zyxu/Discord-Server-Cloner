@@ -139,5 +139,5 @@ This repository uses a self‑bot client for source guild scanning. Self‑bots 
 ---
 
 <p align="center">
-  Made for Discord server administrators
+  Made for Discord server (no need to be administrator or template link)
 </p>
