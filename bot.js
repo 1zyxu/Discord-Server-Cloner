@@ -909,10 +909,6 @@ async function createChannelWithFallback(guild, channelOptions) {
       }
 
       if (fallbackType !== null) {
-        if (CONFIG.interface.verbose_logging) {
-          console.log(`Fallback: Server does not support ${typeName} channel "${channelOptions.name}". Creating as ${fallbackType === 0 ? 'Text' : 'Voice'} instead.`);
-        }
-        
         const fallbackOptions = { ...channelOptions, type: fallbackType };
         if (fallbackType === 0) {
           delete fallbackOptions.videoQualityMode;
