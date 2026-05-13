@@ -1,0 +1,47 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║              NEXUS CLONER — CONFIGURATION                  ║
+# ║                                                              ║
+# ║  Professional Guild Cloning & Backup Utility                 ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  GENERAL SETTINGS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+settings:
+  # Delay between individual API calls (ms)
+  delay_ms: 200
+  
+  # Max bitrate for cloned voice channels (bps)
+  max_bitrate: 96000
+  
+  # Batch size for deleting/creating roles and channels
+  # Lower is safer, higher is faster but risks rate limits
+  batch_size: 5
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  LOGGING & INTERFACE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+interface:
+  # Prompt prefix for the CLI console
+  cli_prompt: "Nexus-Cloner> "
+  
+  # Whether to enable the interactive CLI
+  enable_cli: true
+  
+  # Detailed logging of every channel/role action
+  verbose_logging: true
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  CLONING PREFERENCES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+cloning:
+  # Clone standalone channels that aren't in any category
+  clone_standalone: true
+  
+  # Attempt to clone exact channel types (Announcement, Stage, etc.)
+  # Fallback logic handles servers without Community features
+  smart_fallback: true
+  
+  # Delete existing data in the target guild before cloning
+  # (Recommended to keep as 'true' for a clean clone)
+  auto_delete_target: true
